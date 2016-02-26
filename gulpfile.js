@@ -1,10 +1,17 @@
+/* loads all gulp plugins from package.json
+        var gulpLoadPlugins = require('gulp-load-plugins'),
+            plugins = gulpLoadPlugins();
+
+        call them via plugin.pluginName (camel cased)
+        */
+
 var gulp = require('gulp'),
     // prefixes css to match browser specification
     autoprefixer = require('gulp-autoprefixer'),
     // transpiles scss into css
     sass = require('gulp-sass'),
     // removes all unnecessary characters
-    minifycss = require('gulp-minify-css'),
+    minifyCss = require('gulp-minify-css'),
     // renaming files and fileextensions
     rename = require('gulp-rename'),
     // concatinates files
@@ -13,17 +20,26 @@ var gulp = require('gulp'),
     uglify = require('gulp-uglify'),
     // jshint
     jshint = require('gulp-jshint'),
-
+    // just copies new files to destination folder
     changed = require('gulp-changed'),
-
+    // compresses images for web
     imagemin = require('gulp-imagemin'),
-
-    minifyhtml = require('gulp-minify-html'),
-
-    clean = require('gulp-clean');
+    // minifies HTML
+    minifyHtml = require('gulp-minify-html'),
+    // allows notifications
+    notify = require('gulp-notify'),
+    // see changes to files live in Browser. Needs Browser Plugin too
+    livereload = require('gulp-livereload'),
+    // deletes files in specified folder
+    clean = require('gulp-clean'),
+    // removes debugger and console.logs
+    stripDebug = require('gulp-strip-debug'),
+    // plumber logs errors but prevents gulp from stop running
+    plumber = require('gulp-plumber');
 
 gulp.task('process-styles', function() {
     return gulp.src('src/styles/main.scss')
+        .pipe(changed('dest/styles/'))
         .pipe(sass({
             style: 'expanded'
         }))
@@ -39,38 +55,76 @@ gulp.task('process-styles', function() {
             suffix: '.min'
         }))
         // minify...
-        .pipe(minifycss())
-        .pipe(gulp.dest('dest/styles/'));
+        .pipe(minifyCss())
+        .pipe(gulp.dest('dest/styles/'))
+        .pipe(notify("processing styles completed!"));
 });
 
-gulp.task('process-scripts', function(){
+gulp.task('process-scripts', function() {
     return gulp.src('src/scripts/*.js')
-    .pipe(jshint())
-    .pipe(concat('main.js'))
-    .pipe(gulp.dest('dest/scripts/'))
-    .pipe(rename({
-        suffix: '.min'
-    }))
-    .pipe(uglify())
-    .pipe(gulp.dest('dest/scripts/'));
+        .pipe(plumber())
+        .pipe(changed('dest/scripts/'))
+        .pipe(stripDebug())
+        .pipe(jshint())
+        .pipe(jshint.reporter('default'))
+        // Task fails if jshint has errors
+        .pipe(jshint.reporter('fail'))
+        .pipe(concat('main.js'))
+        .pipe(gulp.dest('dest/scripts/'))
+        .pipe(rename({
+            suffix: '.min'
+        }))
+        .pipe(uglify())
+        .pipe(gulp.dest('dest/scripts/'))
+        .pipe(notify("processing scripts completed!"));
 });
 
 // Bilder (angeblich) verlustfrei komprimieren
-gulp.task('compress-images',function(){
+gulp.task('compress-images', function() {
     return gulp.src('src/images/**/*')
-    .pipe(changed('dest/images'))
-    .pipe(imagemin())
-    .pipe(gulp.dest('dest/images'));
+        .pipe(changed('dest/images/'))
+        .pipe(imagemin())
+        .pipe(gulp.dest('dest/images/'))
+        .pipe(notify("compressing images done!"));
+});
+
+// Copy HTML
+gulp.task('process-html', function() {
+    return gulp.src('src/*.html')
+        .pipe(changed('dest/'))
+        .pipe(minifyHtml())
+        .pipe(gulp.dest('dest/'));
 });
 
 // gulp watch führt bei Änderung automatisch tasks aus
-gulp.task('watch', function(){
-    gulp.watch('src/scripts/*.js', ['process-scripts']);
-    gulp.watch('src/styles/*.scss', ['process-styles']);
-    gulp.watch('*.*', ['default']);
+gulp.task('watch', function() {
+    // Create LiveReload server
+    livereload.listen({
+        reloadPage: 'dest/index.html'
+    });
+    gulp.watch('src/*.html', ['process-html']);
+    gulp.watch('src/scripts/**/*.js', ['process-scripts']);
+    gulp.watch('src/styles/**/*.scss', ['process-styles']);
+    gulp.watch('src/images/**/*', ['compress-images']);
+
+    // Watch any files in dist/, reload on change
+    gulp.watch(['dest/**']).on('change', livereload.changed);
 });
 
-gulp.task('default', function() {
+// cleanup destination folder in case there are files that do not exist anymore
+gulp.task('clean', function() {
+    // read: false makes the task faster
+    return gulp.src(['dest/scripts/**', 'dest/styles/**', 'dest/images/**'], {
+            read: false
+        })
+        // For safety files and folders outside the current working directory can be removed only with option force set to true.
+        .pipe(clean({
+            force: true
+        }));
+});
 
-    console.log("Something was changed!!!");
+// Default Task run with 'gulp' command. Dependency is cleaning up. Then doing a list of tasks
+gulp.task('default', ['clean'], function() {
+
+    gulp.start(['process-styles', 'process-scripts', 'process-html', 'compress-images']);
 });
