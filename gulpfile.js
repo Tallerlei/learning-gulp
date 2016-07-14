@@ -18,6 +18,8 @@ var gulp = require('gulp'),
     concat = require('gulp-concat'),
     // rewrites js code to be short and undescriptive :)
     uglify = require('gulp-uglify'),
+    // creates sourcemaps for debugging minified code
+    sourcemaps = require('gulp-sourcemaps'),
     // jshint
     jshint = require('gulp-jshint'),
     // just copies new files to destination folder
@@ -35,9 +37,14 @@ var gulp = require('gulp'),
     // removes debugger and console.logs
     stripDebug = require('gulp-strip-debug'),
     // plumber logs errors but prevents gulp from stop running
-    plumber = require('gulp-plumber');
+    plumber = require('gulp-plumber'),
+    // allows console parameters
+    argv = require('yargs').argv,
+    // replace Strings and RegExp
+    replace = require('gulp-replace');
 
-gulp.task('process-styles', function() {
+
+gulp.task('process-styles', function () {
     return gulp.src('src/styles/main.scss')
         .pipe(changed('dest/styles/'))
         .pipe(sass({
@@ -60,7 +67,7 @@ gulp.task('process-styles', function() {
         .pipe(notify("processing styles completed!"));
 });
 
-gulp.task('process-scripts', function() {
+gulp.task('process-scripts', function () {
     return gulp.src('src/scripts/*.js')
         .pipe(plumber())
         .pipe(changed('dest/scripts/'))
@@ -79,8 +86,52 @@ gulp.task('process-scripts', function() {
         .pipe(notify("processing scripts completed!"));
 });
 
+
+// miniTask um nur console, alert, debugger und confirm zu entfernen
+// Use gulp devClean --path="pathtojsfiles"
+// Uglify and Mapping is deactivated
+gulp.task('devCleanLight', function () {
+    return gulp.src(argv.path + '/*.js')
+        .pipe(plumber())
+        .pipe(notify(argv.path))
+        // .pipe(sourcemaps.init())
+        .pipe(stripDebug())
+        // replace void 0; from stripDebug only needed if uglify is deactivated
+        .pipe(replace('void 0;', ''))
+        // .pipe(uglify())
+        // .pipe(sourcemaps.write(argv.path + '/maps'))
+        .pipe(gulp.dest(argv.path + '/'));
+});
+
+// creates sourcemaps, minifies and removes console, alert and debugger
+// Use gulp devClean --path="pathtojsfiles"
+gulp.task('devCleanFull', function () {
+    return gulp.src(argv.path + '/*.js')
+        .pipe(plumber())
+        .pipe(sourcemaps.init())
+        .pipe(stripDebug())
+        .pipe(uglify())
+        .pipe(sourcemaps.write(argv.path + '/maps'))
+        .pipe(gulp.dest(argv.path + '/'));
+});
+
+// miniTask um nur console, alert, debugger und confirm zu entfernen
+gulp.task('test', function () {
+    return gulp.src('src/scripts/*.js')
+        .pipe(plumber())
+        .pipe(sourcemaps.init())
+        .pipe(notify(argv.path))
+        .pipe(stripDebug())
+        // replace all console, alert and confirm with and without following ; and also replace debugger;
+        // /((console.log|console.trace|alert|confirm)(.*)\)\"{0};?|debugger\;)/g, ''
+        .pipe(replace('void 0;', ''))
+        .pipe(uglify())
+        .pipe(sourcemaps.write('/maps'))
+        .pipe(gulp.dest('dest/scripts/'));
+});
+
 // Bilder (angeblich) verlustfrei komprimieren
-gulp.task('compress-images', function() {
+gulp.task('compress-images', function () {
     return gulp.src('src/images/**/*')
         .pipe(changed('dest/images/'))
         .pipe(imagemin())
@@ -89,7 +140,7 @@ gulp.task('compress-images', function() {
 });
 
 // Copy HTML
-gulp.task('process-html', function() {
+gulp.task('process-html', function () {
     return gulp.src('src/*.html')
         .pipe(changed('dest/'))
         .pipe(minifyHtml())
@@ -97,7 +148,7 @@ gulp.task('process-html', function() {
 });
 
 // gulp watch führt bei Änderung automatisch tasks aus
-gulp.task('watch', function() {
+gulp.task('watch', function () {
     // Create LiveReload server
     livereload.listen({
         reloadPage: 'dest/index.html'
@@ -112,7 +163,7 @@ gulp.task('watch', function() {
 });
 
 // cleanup destination folder in case there are files that do not exist anymore
-gulp.task('clean', function() {
+gulp.task('clean', function () {
     // read: false makes the task faster
     return gulp.src(['dest/scripts/**', 'dest/styles/**', 'dest/images/**'], {
             read: false
@@ -124,7 +175,7 @@ gulp.task('clean', function() {
 });
 
 // Default Task run with 'gulp' command. Dependency is cleaning up. Then doing a list of tasks
-gulp.task('default', ['clean'], function() {
+gulp.task('default', ['clean'], function () {
 
     gulp.start(['process-styles', 'process-scripts', 'process-html', 'compress-images']);
 });
